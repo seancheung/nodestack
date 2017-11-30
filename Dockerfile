@@ -4,11 +4,19 @@ LABEL maintainer="Sean Cheung <theoxuanx@gmail.com>"
 ENV ELK_VERSION 6.0.0
 
 RUN echo "Install Dependencies..." \
-    && apk add nodejs mysql redis --no-cache --repository=http://dl-3.alpinelinux.org/alpine/edge/main/ \
+    && apk add nodejs mysql mysql-client redis --no-cache --repository=http://dl-3.alpinelinux.org/alpine/edge/main/ \
     && apk add mongodb openjdk8-jre --no-cache --repository=http://dl-3.alpinelinux.org/alpine/edge/community/ \
-    && apk add --no-cache git openssl supervisor nginx apache2-utils libzmq python make g++ \
+    && apk add --no-cache bash git openssl supervisor nginx apache2-utils libzmq python make g++ \
     && mkdir -p /usr/local/lib \
     && ln -s /usr/lib/*/libzmq.so.3 /usr/local/lib/libzmq.so \
+    && for path in \
+		/var/log/mysql \
+		/var/run/mysql \
+		/var/opt/mysql \
+	; do \
+	mkdir -p "$path"; \
+	chown mysql:mysql "$path"; \
+	done \
     && apk add --no-cache -t .build-deps wget ca-certificates \
     && set -x \
     && cd /tmp \
