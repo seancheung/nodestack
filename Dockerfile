@@ -6,17 +6,9 @@ ENV ELK_VERSION 6.0.0
 RUN echo "Install Dependencies..." \
     && apk add nodejs mysql mysql-client redis --no-cache --repository=http://dl-3.alpinelinux.org/alpine/edge/main/ \
     && apk add mongodb openjdk8-jre --no-cache --repository=http://dl-3.alpinelinux.org/alpine/edge/community/ \
-    && apk add --no-cache bash git openssl supervisor nginx apache2-utils libzmq python make g++ \
+    && apk add --no-cache bash git openssl supervisor su-exec nginx apache2-utils libzmq python make g++ \
     && mkdir -p /usr/local/lib \
     && ln -s /usr/lib/*/libzmq.so.3 /usr/local/lib/libzmq.so \
-    && for path in \
-		/var/log/mysql \
-		/var/run/mysql \
-		/var/opt/mysql \
-	; do \
-	mkdir -p "$path"; \
-	chown mysql:mysql "$path"; \
-	done \
     && apk add --no-cache -t .build-deps wget ca-certificates \
     && set -x \
     && cd /tmp \
@@ -48,6 +40,10 @@ RUN echo "Install Dependencies..." \
 	&& sed -i "s|$bundled|$apline_node|g" /usr/share/kibana/bin/kibana-plugin \
 	&& sed -i "s|$bundled|$apline_node|g" /usr/share/kibana/bin/kibana \
     && rm -rf /usr/share/kibana/node \
+    && adduser -DH -s /sbin/nologin elk  \
+    && chown -R elk:elk /usr/share/elasticsearch \
+    && chown -R elk:elk /usr/share/logstash \
+    && chown -R elk:elk /usr/share/kibana \
     && echo "Clean Up..." \
 	&& rm -rf /tmp/* \
 	&& apk del --purge .build-deps
