@@ -4,9 +4,8 @@ LABEL maintainer="Sean Cheung <theoxuanx@gmail.com>"
 COPY supervisord.conf /etc/supervisor/
 COPY entrypoint.sh /entrypoint.sh
 
-ENV MYSQL_BOOTSQL=/var/run/mysql/.init
-
-VOLUME [ "/var/opt/mysql" ]
+VOLUME [ "/var/opt/mysql", "/var/opt/redis", "/var/opt/mongodb", "/var/opt/elasticsearch", "/var/opt/logstash"]
+EXPOSE 3306 6379 27017 9200 9300 5601 
 
 ENTRYPOINT ["/entrypoint.sh"]
 

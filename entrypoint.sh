@@ -1,7 +1,29 @@
 #!/bin/bash
 set -e
 
-function boot()
+MYSQL_INITSQL=/var/run/mysql/.init
+
+function ensure_dir()
+{
+    for dir in "/var/run/mysql" "/var/log/mysql" "/var/opt/mysql"; do
+        mkdir -p $dir
+        chown mysql:mysql $dir
+    done
+    for dir in "/var/run/redis" "/var/log/redis" "/var/opt/redis"; do
+        mkdir -p $dir
+        chown redis:redis $dir
+    done
+    for dir in "/var/run/mongodb" "/var/log/mongodb" "/var/opt/mongodb"; do
+        mkdir -p $dir
+        chown mongodb:mongodb $dir
+    done
+    for dir in "/var/run/elasticsearch" "/var/log/elasticsearch" "/var/opt/elasticsearch" "/var/log/kibana" "/var/run/logstash" "/var/log/logstash" "/var/opt/logstash"; do
+        mkdir -p $dir
+        chown elk:elk $dir
+    done
+}
+
+function boot_mysql()
 {
     bootfile=$1
     cat > $bootfile << EOF
@@ -65,8 +87,10 @@ EOF
     mysql_install_db --user=mysql --datadir=/var/opt/mysql
 }
 
-if [ ! -f "$MYSQL_BOOTSQL" ]; then
-    boot "$MYSQL_BOOTSQL"
+ensure_dir
+
+if [ ! -f "$MYSQL_INITSQL" ]; then
+    boot_mysql "$MYSQL_INITSQL"
 fi
 
 exec "$@"
