@@ -17,9 +17,14 @@ function ensure_dir()
         mkdir -p $dir
         chown mongodb:mongodb $dir
     done
-    for dir in "/var/run/elasticsearch" "/var/log/elasticsearch" "/var/opt/elasticsearch" "/var/log/kibana" "/var/run/logstash" "/var/log/logstash" "/var/opt/logstash"; do
+    for dir in "/var/run/elasticsearch" "/var/log/elasticsearch" "/var/opt/elasticsearch" \
+        "/var/log/kibana" "/var/run/logstash" "/var/log/logstash" "/var/opt/logstash"; do
         mkdir -p $dir
         chown elk:elk $dir
+    done
+    for dir in "/var/run/nginx" "/var/log/nginx"; do
+        mkdir -p $dir
+        chown nginx:nginx $dir
     done
 }
 
@@ -27,9 +32,9 @@ function boot_mysql()
 {
     bootfile=$1
     cat > $bootfile << EOF
-    USE mysql;
-    UPDATE user SET password=PASSWORD('') WHERE user='root' AND host='localhost';
-    GRANT ALL PRIVILEGES ON *.* TO 'root'@'localhost' WITH GRANT OPTION;
+USE mysql;
+UPDATE user SET password=PASSWORD('') WHERE user='root' AND host='localhost';
+GRANT ALL PRIVILEGES ON *.* TO 'root'@'localhost' WITH GRANT OPTION;
 EOF
 
     if [ -n "$MYSQL_ROOT_PASSWORD" ]; then
@@ -37,7 +42,8 @@ EOF
         echo "GRANT ALL PRIVILEGES ON *.* TO 'root'@'%' IDENTIFIED BY '${MYSQL_ROOT_PASSWORD}' WITH GRANT OPTION;" >> $bootfile
     fi
 
-    # MYSQL_USER=username:password;username:password
+    # MYSQL_USER: "username:password" or "username". password will be the same as username if omitted.
+    # For multiple user creation, seperate them with ";".
     if [ -n "$MYSQL_USER" ]; then
         IFS=';'; users=($MYSQL_USER); unset IFS;
         for entry in "${users[@]}"; do
@@ -57,7 +63,9 @@ EOF
         done
     fi
 
-    # MYSQL_DATABASE: username@database;username@database;
+    # MYSQL_DATABASE: "username@database" or "database". username will be the same as database if omitted.
+    # User will be created(with password the same as username) if not exist.
+    # For multiple database creation, seperate them with ";".
     if [ -n "$MYSQL_DATABASE" ]; then
         IFS=';'; ary=($MYSQL_DATABASE); unset IFS;
         for entry in "${ary[@]}"; do
@@ -87,10 +95,38 @@ EOF
     mysql_install_db --user=mysql --datadir=/var/opt/mysql
 }
 
+function init_nginx()
+{
+    if [ -f "/etc/nginx/conf.d/default.conf" ]; then
+        mv /etc/nginx/conf.d/default.conf /etc/nginx/conf.d/default
+    fi
+
+    if [ -f "/etc/nginx/conf.d/kibana.conf" ] && [ ! -f "/etc/nginx/kibana.auth" ]; then
+        IFS=':'; credentials=($1); unset IFS;
+        if [ ${#credentials[@]} -eq 1 ]; then
+            username=${credentials[0]}
+            password=$username
+        elif [ ${#credentials[@]} -eq 2 ]; then
+            username=${credentials[0]}
+            password=${credentials[1]}
+        else
+            echo "[Nginx] invalid credentials in $1"
+            exit 1
+        fi
+        htpasswd -b -c /etc/nginx/kibana.auth "$username" "$password"
+        sed -i '/auth_basic/s/^\(\s*\)#/\1/g' /etc/nginx/conf.d/kibana.conf 
+    fi
+}
+
 ensure_dir
 
 if [ ! -f "$MYSQL_INITSQL" ]; then
     boot_mysql "$MYSQL_INITSQL"
+fi
+
+# KIBANA_AUTH: "username:password" or "username". password will be the same as username if omitted
+if [ -n "$KIBANA_AUTH" ]; then
+    init_nginx "$KIBANA_AUTH"
 fi
 
 exec "$@"
