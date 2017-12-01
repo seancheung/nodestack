@@ -1,10 +1,9 @@
 #!/bin/bash
 set -e
 
-bootfile=/var/run/mysql/.init
-
-function init()
+function boot()
 {
+    bootfile=$1
     cat > $bootfile << EOF
     USE mysql;
     UPDATE user SET password=PASSWORD('') WHERE user='root' AND host='localhost';
@@ -16,35 +15,47 @@ EOF
         echo "GRANT ALL PRIVILEGES ON *.* TO 'root'@'%' IDENTIFIED BY '${MYSQL_ROOT_PASSWORD}' WITH GRANT OPTION;" >> $bootfile
     fi
 
-    # database in this format: username:password@database;username:password@database;
+    # MYSQL_USER=username:password;username:password
+    if [ -n "$MYSQL_USER" ]; then
+        IFS=';'; users=($MYSQL_USER); unset IFS;
+        for entry in "${users[@]}"; do
+            IFS=':'; sub=($entry); unset IFS;
+            if [ ${#sub[@]} -eq 1 ]; then
+                username=${sub[0]}
+                password=$username
+            elif [ ${#sub[@]} -eq 2 ]; then
+                username=${sub[0]}
+                password=${sub[1]}
+            else
+                echo "[Mysql] invalid username in ${MYSQL_USER}"
+                exit 1
+            fi
+            echo "[Mysql] create user ${username}"
+            echo "CREATE USER IF NOT EXISTS '${username}'@'%' IDENTIFIED BY '${password}';" >> $bootfile
+        done
+    fi
+
+    # MYSQL_DATABASE: username@database;username@database;
     if [ -n "$MYSQL_DATABASE" ]; then
         IFS=';'; ary=($MYSQL_DATABASE); unset IFS;
         for entry in "${ary[@]}"; do
             IFS='@'; sub=($entry); unset IFS;
             if [ ${#sub[@]} -eq 1 ]; then
-                database=${sub[0]}
+                username=${sub[0]}
+                database=$username
             elif [ ${#sub[@]} -eq 2 ]; then
+                username=${sub[0]}
                 database=${sub[1]}
             else
-                echo "[Mysql] invalid database name in ${MYSQL_DATABASE}"
+                echo "[Mysql] invalid database in ${MYSQL_DATABASE}"
                 exit 1
             fi
-            if [ -z "$database" ]; then
-                echo "[Mysql] missing database name in ${MYSQL_DATABASE}"
-                exit 1
-            fi
-            username=$database
-            userpass=$database
-            if [ ${#sub[@]} -eq 2 ] && [ -n "${sub[0]}" ]; then
-                IFS=':'; cred=(${entry[0]}); unset IFS;
-                username=${cred[0]}
-                if [ -n "${cred[1]}" ]; then
-                    userpass=${cred[1]}
-                fi
-            fi
-            echo "[Mysql] create database ${database} for ${username}"
+            echo "[Mysql] create database ${database}"
             echo "CREATE DATABASE IF NOT EXISTS \`${database}\` CHARACTER SET utf8 COLLATE utf8_general_ci;" >> $bootfile
-            echo "GRANT ALL ON \`${userpass}\`.* to '${username}'@'%' IDENTIFIED BY '${userpass}';" >> $bootfile
+            # ensure user exists
+            echo "CREATE USER IF NOT EXISTS '${username}'@'%' IDENTIFIED BY '${username}';" >> $bootfile
+            echo "[Mysql] grant privileges to ${username} on ${database}"
+            echo "GRANT ALL PRIVILEGES ON \`${database}\`.* to '${username}'@'%';" >> $bootfile
         done
     fi
 
@@ -54,8 +65,8 @@ EOF
     mysql_install_db --user=mysql --datadir=/var/opt/mysql
 }
 
-if [ ! -f "$bootfile" ]; then
-    init
+if [ ! -f "$MYSQL_BOOTSQL" ]; then
+    boot "$MYSQL_BOOTSQL"
 fi
 
 exec "$@"
